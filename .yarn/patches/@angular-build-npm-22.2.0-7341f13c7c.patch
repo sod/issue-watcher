@@ -1,0 +1,14 @@
+diff --git a/src/utils/watcher.js b/src/utils/watcher.js
+index 1f3c27f835d6942d451d113052240e7eed9e9c6a..1efc9b51a1d1ed79aaa3c8ee730f1937c9d551cc 100755
+--- a/src/utils/watcher.js
++++ b/src/utils/watcher.js
+@@ -427,6 +427,9 @@ class ParcelExternalManager {
+         this.pendingSubscriptions.set(dirKey, subPromise);
+         try {
+             const sub = await subPromise;
++            if (process.env['WATCHER_FIX'] === '1') {
++                this.pendingSubscriptions.delete(dirKey);
++            }
+             if (this.externalDirFiles.has(dirKey) && !this.isCoveredByExistingExternal(dirKey)) {
+                 this.extraSubscriptions.set(dirKey, sub);
+                 // Subsume any nested child subscriptions that are now covered by this parent subscription
