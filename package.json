@@ -2,10 +2,10 @@
   "name": "issue-watcher",
   "version": "0.0.0",
   "scripts": {
-    "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "ng": "cd app && ng",
+    "start": "cd app && ng serve",
+    "build": "cd app && ng build",
+    "watch": "cd app && ng build --watch --configuration development"
   },
   "private": true,
   "packageManager": "yarn@4.18.1",

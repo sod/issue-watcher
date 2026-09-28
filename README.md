@@ -1,59 +1,67 @@
-# IssueWatcher
+# Watch mode ignores files outside the workspace root
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.0.7.
+Reproduction for `@angular/build` 22.2.0: in watch mode (`ng serve`, `ng build --watch`), changes to files that live
+outside the Angular workspace root never trigger a rebuild.
 
-## Development server
+## Setup
 
-To start a local development server, run:
+- `app/` is the Angular workspace (contains `angular.json`).
+- `lib/greeting.ts` lives outside of it and is imported by `app/src/app/app.ts` through the tsconfig path
+  `@lib/*` → `../lib/*`. This is a common monorepo layout for shared libraries.
 
-```bash
-ng serve
-```
-
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Reproduce
 
 ```bash
-ng generate component component-name
+yarn install
 ```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
 
 ```bash
-ng generate --help
+yarn watch
 ```
 
-## Building
+1. Wait for `Watch mode enabled. Watching for file changes...`.
+2. Change something in `app/src/app/app.ts` → a rebuild runs, as expected.
+3. Change the string in `lib/greeting.ts` → **nothing happens**. The new text only appears after restarting the
+   watcher.
 
-To build the project run:
+`yarn start` (`ng serve`) behaves the same.
 
-```bash
-ng build
+## Expected
+
+Changing `lib/greeting.ts` triggers a rebuild, as it did before the watcher was rewritten on top of `@parcel/watcher`.
+
+## Cause
+
+`packages/angular/build/src/utils/watcher.ts`, `ParcelExternalManager.ensureDirWatched()`:
+
+```ts
+this.pendingSubscriptions.set(dirKey, subPromise);
+
+try {
+  const sub = await subPromise;
+  if (this.externalDirFiles.has(dirKey) && !this.isCoveredByExistingExternal(dirKey)) {
+    this.extraSubscriptions.set(dirKey, sub);
+    // ...
+  } else {
+    sub.unsubscribe().catch(() => {});
+  }
+} finally {
+  this.pendingSubscriptions.delete(dirKey);
+}
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Every file outside the workspace root gets its own Parcel subscription for its directory. After that subscription
+resolves, `isCoveredByExistingExternal(dirKey)` still sees the subscription's own entry in `pendingSubscriptions`,
+because that entry is only removed in `finally`. The check therefore always returns `true`, and the new subscription
+is unsubscribed immediately. So no directory outside the workspace root is ever watched.
 
-## Running unit tests
+## Fix
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Remove the pending entry before the coverage check:
 
-```bash
-ng test
+```diff
+   try {
+     const sub = await subPromise;
++    this.pendingSubscriptions.delete(dirKey);
+     if (this.externalDirFiles.has(dirKey) && !this.isCoveredByExistingExternal(dirKey)) {
 ```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
